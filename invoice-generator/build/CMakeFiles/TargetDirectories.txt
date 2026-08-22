@@ -1,0 +1,4 @@
+/Users/augougea/Desktop/latex/latex/invoice-generator/build/CMakeFiles/invoice.dir
+/Users/augougea/Desktop/latex/latex/invoice-generator/build/CMakeFiles/invoice-example.dir
+/Users/augougea/Desktop/latex/latex/invoice-generator/build/CMakeFiles/edit_cache.dir
+/Users/augougea/Desktop/latex/latex/invoice-generator/build/CMakeFiles/rebuild_cache.dir
