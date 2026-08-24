@@ -12,7 +12,10 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 find_package(PoDoFo REQUIRED)
 
 add_library(invoice
+    src/Company.cpp
+    src/Customer.cpp
     src/Invoice.cpp
+    src/InvoiceItem.cpp
     src/InvoicePdf.cpp
 )
 
