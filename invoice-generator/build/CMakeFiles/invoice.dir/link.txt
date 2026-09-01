@@ -1,2 +1,0 @@
-/usr/bin/ar qc libinvoice.a CMakeFiles/invoice.dir/src/Company.cpp.o CMakeFiles/invoice.dir/src/Customer.cpp.o CMakeFiles/invoice.dir/src/Invoice.cpp.o CMakeFiles/invoice.dir/src/InvoiceItem.cpp.o CMakeFiles/invoice.dir/src/InvoicePdf.cpp.o CMakeFiles/invoice.dir/src/Layout.cpp.o
-/usr/bin/ranlib libinvoice.a
