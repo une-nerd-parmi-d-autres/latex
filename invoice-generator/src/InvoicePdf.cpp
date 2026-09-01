@@ -1,140 +1,230 @@
 #include "invoice/InvoicePdf.hpp"
-#include <podofo/podofo.h>
 #include <iomanip>
 #include <sstream>
-#include <string>
 
 namespace invoice
 {
+
 namespace
 {
+
 std::string formatMoney(double value)
 {
     std::ostringstream stream;
     stream << std::fixed << std::setprecision(2) << value << " EUR";
     return stream.str();
 }
+
 }
 
 void InvoicePdf::generate(const Invoice& invoice, const std::string& filename) const
 {
-    PoDoFo::PdfMemDocument document;
-    auto& pages = document.GetPages();
-    auto& page = pages.CreatePageAt(0, PoDoFo::PdfPageSize::A4);
-    PoDoFo::PdfPainter painter;
-    painter.SetCanvas(page);
-    auto* font = document.GetFonts().SearchFont("Helvetica");
-    painter.SetStrokeStyle(PoDoFo::PdfStrokeStyle::Solid);
-    painter.GraphicsState.SetLineWidth(1.0);
+    PdfMemDocument document;
+    const std::vector<PageDefinition> definitions{{PdfPageSize::A4, PdfStrokeStyle::Solid, 1.0}};
+    std::vector<std::unique_ptr<PdfPainter>> painters;
+    const auto contexts = createPageContexts(document, definitions, painters);
+    const Layout layout = loadLayout("layout/invoice.layout");
 
-    const BlockGeometry companyGeometry{50.0, 800.0, 240.0, 90.0, 10.0, 22.0, 42.0, 57.0, 72.0};
-    const BlockGeometry invoiceGeometry{305.0, 800.0, 240.0, 90.0, 10.0, 25.0, 47.0, 65.0, 0.0};
-    const BlockGeometry customerGeometry{50.0, 685.0, 495.0, 80.0, 10.0, 20.0, 40.0, 57.0, 0.0};
+    for (const auto& context : contexts)
+        drawPage(invoice, context, layout);
 
-    drawCompanyBlock(painter, *font, invoice, companyGeometry);
-    drawInvoiceBlock(painter, *font, invoice, invoiceGeometry);
-    drawCustomerBlock(painter, *font, invoice, customerGeometry);
-
-    double tableBottom = 0.0;
-    
-    const TableGeometry tableGeometry{50.0, 585.0, 495.0, 60.0, 350.0, 430.0, 340.0, 420.0, 25.0, 17.0};
-    
-    const double totalHT = drawItemsTable(painter, *font, invoice, tableBottom, tableGeometry);
-
-    drawTotals(painter, *font, totalHT, tableBottom);
-    drawFooter(painter, *font, invoice);
-
-    painter.FinishDrawing();
     document.Save(filename);
 }
 
-void InvoicePdf::drawCompanyBlock(PoDoFo::PdfPainter& painter, PoDoFo::PdfFont& font, const Invoice& invoice, const BlockGeometry& geometry) const
+std::vector<PageContext> InvoicePdf::createPageContexts(PdfMemDocument& document, const std::vector<PageDefinition>& definitions, std::vector<std::unique_ptr<PdfPainter>>& painters) const
 {
-    painter.DrawRectangle(geometry.x, geometry.y - geometry.height, geometry.width, geometry.height);
-    painter.TextState.SetFont(font, 16);
-    painter.DrawText(invoice.company.name, geometry.x + geometry.padding, geometry.y - geometry.titleOffset);
-    painter.TextState.SetFont(font, 10);
-    painter.DrawText(invoice.company.address, geometry.x + geometry.padding, geometry.y - geometry.line1Offset);
-    painter.DrawText(invoice.company.phoneNumber, geometry.x + geometry.padding, geometry.y - geometry.line2Offset);
-    painter.DrawText(invoice.company.email, geometry.x + geometry.padding, geometry.y - geometry.line3Offset);
+    PdfFont& font = document.GetFonts().GetOrCreateFont("font/NotoSans-Regular.ttf");
+    std::vector<PageContext> contexts;
+
+    painters.reserve(definitions.size());
+    contexts.reserve(definitions.size());
+
+    for (const auto& definition : definitions)
+    {
+        auto page = &document.GetPages().CreatePage(PdfPage::CreateStandardPageSize(definition.size));
+        auto painter = std::make_unique<PdfPainter>();
+
+        painter->SetCanvas(*page);
+        painter->SetStrokeStyle(definition.strokeStyle);
+        painter->GraphicsState.SetLineWidth(definition.lineWidth);
+
+        contexts.push_back({page, painter.get(), &font});
+        painters.push_back(std::move(painter));
+    }
+
+    return contexts;
 }
 
-void InvoicePdf::drawInvoiceBlock(PoDoFo::PdfPainter& painter, PoDoFo::PdfFont& font, const Invoice& invoice, const BlockGeometry& geometry) const
+void InvoicePdf::drawPage(const Invoice& invoice, const PageContext& context, const Layout& layout) const
 {
-    painter.DrawRectangle(geometry.x, geometry.y - geometry.height, geometry.width, geometry.height);
-    painter.TextState.SetFont(font, 18);
-    painter.DrawText("FACTURE", geometry.x + geometry.padding, geometry.y - geometry.titleOffset);
-    painter.TextState.SetFont(font, 10);
-    const std::string number = "Numero : " + invoice.number;
-    const std::string date = "Date : " + invoice.date;
-    painter.DrawText(number, geometry.x + geometry.padding, geometry.y - geometry.line1Offset);
-    painter.DrawText(date, geometry.x + geometry.padding, geometry.y - geometry.line2Offset);
+    PdfPainter& painter = *context.painter;
+    PdfFont& font = *context.font;
+    const Rect pageRect = context.page->GetRect();
+    const double pageWidth = pageRect.GetRight() - pageRect.GetLeft();
+    const double pageHeight = pageRect.GetTop() - pageRect.GetBottom();
+
+    painter.SetStrokeStyle(PdfStrokeStyle::Solid);
+    painter.GraphicsState.SetLineWidth(1.0);
+    painter.GraphicsState.SetStrokingColor(PoDoFo::PdfColor(0.8, 0.2, 0.2));
+    painter.DrawRectangle(pageRect.GetLeft(), pageRect.GetBottom(), pageWidth, pageHeight);
+
+    drawCompanyBlock(painter, font, invoice, layout.blocks[0]);
+    drawInvoiceBlock(painter, font, invoice, layout.blocks[1]);
+    drawInvoiceTable(painter, font, invoice, layout.blocks[2]);
+    drawCustomerBlock(painter, font, invoice, layout.blocks[3]);
+
+    painter.FinishDrawing();
 }
 
-void InvoicePdf::drawCustomerBlock(PoDoFo::PdfPainter& painter, PoDoFo::PdfFont& font, const Invoice& invoice, const BlockGeometry& geometry) const
+void InvoicePdf::drawCompanyBlock(PdfPainter& painter, PdfFont& font, const Invoice& invoice, const BlockGeometry& geometry) const
 {
-    painter.DrawRectangle(geometry.x, geometry.y - geometry.height, geometry.width, geometry.height);
-    painter.TextState.SetFont(font, 12);
-    painter.DrawText("CLIENT", geometry.x + geometry.padding, geometry.y - geometry.titleOffset);
-    painter.TextState.SetFont(font, 10);
-    painter.DrawText(invoice.customer.name, geometry.x + geometry.padding, geometry.y - geometry.line1Offset);
-    painter.DrawText(invoice.customer.address, geometry.x + geometry.padding, geometry.y - geometry.line2Offset);
+    const std::vector<TextLine> lines{};
+    drawTextBlock(painter, font, geometry, lines);
 }
 
-double InvoicePdf::drawItemsTable(PoDoFo::PdfPainter& painter, PoDoFo::PdfFont& font, const Invoice& invoice, double& tableBottom, const TableGeometry& geometry) const
+void InvoicePdf::drawInvoiceBlock(PdfPainter& painter, PdfFont& font, const Invoice& invoice, const BlockGeometry& geometry) const
 {
-    const double tableHeight = geometry.rowHeight * (invoice.items.size() + 1);
-    tableBottom = geometry.y - tableHeight;
+    const std::vector<TextLine> lines{};
+    drawTextBlock(painter, font, geometry, lines);
+}
 
-    painter.TextState.SetFont(font, 10);
-    painter.DrawText("Description", geometry.descriptionX, geometry.y - geometry.textOffset);
-    painter.DrawText("Quantite", geometry.quantityX, geometry.y - geometry.textOffset);
-    painter.DrawText("Prix unitaire", geometry.priceX, geometry.y - geometry.textOffset);
+void InvoicePdf::drawCustomerBlock(PdfPainter& painter, PdfFont& font, const Invoice& invoice, const BlockGeometry& geometry) const
+{
+    const double zoneHeight = geometry.height / 3.0;
+    const BlockGeometry tvaZone{geometry.x, geometry.y, geometry.width, zoneHeight, geometry.padding, geometry.lineSpacing};
+    const BlockGeometry paymentZone{geometry.x, geometry.y - zoneHeight, geometry.width, zoneHeight, geometry.padding, geometry.lineSpacing};
+    const BlockGeometry bankZone{geometry.x, geometry.y - zoneHeight * 2.0, geometry.width, zoneHeight, geometry.padding, geometry.lineSpacing};
 
-    painter.DrawLine(geometry.x, geometry.y, geometry.x + geometry.width, geometry.y);
-    painter.DrawLine(geometry.x, geometry.y - geometry.rowHeight, geometry.x + geometry.width, geometry.y - geometry.rowHeight);
+    const std::vector<TextLine> paymentLines{
+        {"Condition de règlement : 30 jours suivant la facture", 8.0},
+        {"Modalité et condition de règlement : Virement bancaire", 8.0}
+    };
 
-    double currentY = geometry.y - geometry.rowHeight;
+    const std::vector<TextLine> bankLines{
+        {"B.I.C. : BOUSFRPPXXX", 8.0},
+        {"I.B.A.N. : FR76 4061 8803 5800 0402 3905 363", 8.0}
+    };
+
+    const std::vector<TextLine> legalLines{
+        {"La présente facture sera payable au plus tard le : 02/08/2023. Passé ce délai, sans obligation dʼenvoi dʼune relance, conformément à lʼarticle L441-10 II du Code de Commerce, il sera appliqué une pénalité calculée à un taux annuel de 10%. Une indemnité forfaitaire pour frais de recouvrement de 40€ sera aussi exigible. Escompte pour paiement anticipé : néant. Les opérations donnant lieu à facture sont constituées exclusivement de prestations de services.", 8.0},
+        {"N° Siret 923 249 908 00016", 8.0},
+        {"Code APE 8552Z", 8.0}
+    };
+
+    drawTextBlock(painter, font, tvaZone, paymentLines);
+    drawTextBlock(painter, font, paymentZone, bankLines);
+    drawTextBlock(painter, font, bankZone, legalLines);
+}
+
+void InvoicePdf::drawTextBlock(PdfPainter& painter, PdfFont& font, const BlockGeometry& geometry, const std::vector<TextLine>& lines) const
+{
+    const double margin = 5.0;
+    const double lineGap = 3.0;
+    const double x = geometry.x + geometry.padding + margin;
+    const double maxWidth = geometry.width - 2.0 * (geometry.padding + margin);
+    const double topY = geometry.y - geometry.padding - margin;
+
+    struct WrappedLine
+    {
+        std::string text;
+        double fontSize;
+    };
+
+    std::vector<WrappedLine> wrappedLines;
+
+    for (const auto& line : lines)
+    {
+        painter.TextState.SetFont(font, line.fontSize);
+        const auto splitLines = painter.TextState.GetState().SplitTextAsLines(line.text, maxWidth);
+
+        for (const auto& splitLine : splitLines)
+            wrappedLines.push_back({splitLine, line.fontSize});
+    }
+
+    painter.DrawRectangle(geometry.x, geometry.y - geometry.height, geometry.width, geometry.height);
+
+    double currentY = topY;
+
+    for (const auto& line : wrappedLines)
+    {
+        painter.TextState.SetFont(font, line.fontSize);
+        painter.DrawText(line.text, x, currentY);
+        currentY -= line.fontSize + lineGap;
+    }
+}
+
+void InvoicePdf::drawParagraph(PdfPainter& painter, PdfFont& font, const std::string& text, double x, double y, double maxWidth, double lineHeight) const
+{
+    painter.TextState.SetFont(font, painter.TextState.GetState().FontSize);
+    const auto lines = painter.TextState.GetState().SplitTextAsLines(text, maxWidth);
+
+    for (std::size_t i = 0; i < lines.size(); ++i)
+        painter.DrawText(lines[i], x, y - static_cast<double>(i) * lineHeight);
+}
+
+double InvoicePdf::drawInvoiceTable(PdfPainter& painter, PdfFont& font, const Invoice& invoice, const BlockGeometry& geometry) const
+{
+    const InvoiceTableLayout table{25.0, 25.0, 80.0, 110.0, 200.0, geometry.padding};
+    const double left = geometry.x;
+    const double right = geometry.x + geometry.width;
+    const double top = geometry.y;
+    const double headerBottom = top - table.headerHeight;
+    const double quantityLineX = right - table.unitPriceWidth - table.quantityWidth;
+    const double priceLineX = right - table.unitPriceWidth;
+    const double descriptionX = left + table.padding;
+    const double quantityX = quantityLineX + table.padding;
+    const double priceX = priceLineX + table.padding;
+    const double itemsBottom = headerBottom - table.rowHeight * invoice.items.size();
+
+    painter.TextState.SetFont(font, 10.0);
+    painter.DrawText("Description", descriptionX, top - table.padding);
+    painter.DrawText("Quantite", quantityX, top - table.padding);
+    painter.DrawText("Prix unitaire", priceX, top - table.padding);
+
+    painter.DrawLine(left, top, right, top);
+    painter.DrawLine(left, headerBottom, right, headerBottom);
+
+    double currentY = headerBottom;
     double totalHT = 0.0;
 
     for (const auto& item : invoice.items)
     {
         totalHT += item.quantity * item.unitPrice;
-        currentY -= geometry.rowHeight;
-        painter.DrawText(item.description, geometry.descriptionX, currentY + geometry.textOffset);
-        painter.DrawText(std::to_string(item.quantity), geometry.quantityX, currentY + geometry.textOffset);
-        painter.DrawText(formatMoney(item.unitPrice), geometry.priceX, currentY + geometry.textOffset);
-        painter.DrawLine(geometry.x, currentY, geometry.x + geometry.width, currentY);
+        currentY -= table.rowHeight;
+
+        painter.DrawText(item.description, descriptionX, currentY + 8.0);
+        painter.DrawText(std::to_string(item.quantity), quantityX, currentY + 8.0);
+        painter.DrawText(formatMoney(item.unitPrice), priceX, currentY + 8.0);
+        painter.DrawLine(left, currentY, right, currentY);
     }
 
-    painter.DrawLine(geometry.x, geometry.y, geometry.x, tableBottom);
-    painter.DrawLine(geometry.quantityLineX, geometry.y, geometry.quantityLineX, tableBottom);
-    painter.DrawLine(geometry.priceLineX, geometry.y, geometry.priceLineX, tableBottom);
-    painter.DrawLine(geometry.x + geometry.width, geometry.y, geometry.x + geometry.width, tableBottom);
+    painter.DrawLine(left, top, left, itemsBottom);
+    painter.DrawLine(quantityLineX, top, quantityLineX, itemsBottom);
+    painter.DrawLine(priceLineX, top, priceLineX, itemsBottom);
+    painter.DrawLine(right, top, right, itemsBottom);
+
+    const double totalsTop = itemsBottom;
+    const double totalsBottom = totalsTop - table.rowHeight * 3.0;
+    const double totalsX = right - table.totalsWidth;
+
+    painter.DrawLine(totalsX, totalsTop, right, totalsTop);
+    painter.DrawLine(totalsX, totalsBottom, right, totalsBottom);
+    painter.DrawLine(totalsX, totalsTop, totalsX, totalsBottom);
+    painter.DrawLine(right, totalsTop, right, totalsBottom);
+    painter.DrawLine(totalsX, totalsTop - table.rowHeight, right, totalsTop - table.rowHeight);
+    painter.DrawLine(totalsX, totalsTop - table.rowHeight * 2.0, right, totalsTop - table.rowHeight * 2.0);
+
+    painter.TextState.SetFont(font, 10.0);
+    painter.DrawText("Total HT", totalsX + table.padding, totalsTop - 17.0);
+    painter.DrawText(formatMoney(totalHT), totalsX + 100.0, totalsTop - 17.0);
+    painter.DrawText("TVA", totalsX + table.padding, totalsTop - table.rowHeight - 17.0);
+    painter.DrawText("0.00 EUR", totalsX + 100.0, totalsTop - table.rowHeight - 17.0);
+
+    painter.TextState.SetFont(font, 11.0);
+    painter.DrawText("TOTAL", totalsX + table.padding, totalsTop - table.rowHeight * 2.0 - 17.0);
+    painter.DrawText(formatMoney(totalHT), totalsX + 100.0, totalsTop - table.rowHeight * 2.0 - 17.0);
 
     return totalHT;
-}
-
-void InvoicePdf::drawTotals(PoDoFo::PdfPainter& painter, PoDoFo::PdfFont& font, double totalHT, double tableBottom) const
-{
-    constexpr double x = 400.0;
-    const std::string totalHTText = "Total HT : " + formatMoney(totalHT);
-    const std::string totalText = "TOTAL : " + formatMoney(totalHT);
-    painter.TextState.SetFont(font, 10);
-    painter.DrawText(totalHTText, x, tableBottom - 25);
-    painter.TextState.SetFont(font, 12);
-    painter.DrawText(totalText, x, tableBottom - 50);
-}
-
-void InvoicePdf::drawFooter(PoDoFo::PdfPainter& painter, PoDoFo::PdfFont& font, const Invoice& invoice) const
-{
-    constexpr double margin = 50.0;
-    constexpr double footerY = 60.0;
-    painter.DrawLine(margin, footerY + 35, 545.0, footerY + 35);
-    painter.TextState.SetFont(font, 9);
-    painter.DrawText("Merci pour votre confiance", 220.0, footerY + 15);
-    painter.DrawText(invoice.company.name, 220.0, footerY);
-    painter.DrawText(invoice.company.email, 220.0, footerY - 15);
 }
 
 }

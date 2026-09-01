@@ -17,6 +17,7 @@ add_library(invoice
     src/Invoice.cpp
     src/InvoiceItem.cpp
     src/InvoicePdf.cpp
+    src/Layout.cpp
 )
 
 target_include_directories(invoice

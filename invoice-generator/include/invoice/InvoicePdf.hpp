@@ -1,36 +1,51 @@
 #pragma once
-#include "invoice/Invoice.hpp"
+
+#include <memory>
 #include <podofo/podofo.h>
 #include <string>
+#include <vector>
+#include "invoice/Invoice.hpp"
+#include "invoice/Layout.hpp"
 
 namespace invoice
 {
 
-struct BlockGeometry
+using PoDoFo::PdfFont;
+using PoDoFo::PdfMemDocument;
+using PoDoFo::PdfPage;
+using PoDoFo::PdfPageSize;
+using PoDoFo::PdfPainter;
+using PoDoFo::PdfStrokeStyle;
+using PoDoFo::Rect;
+
+struct TextLine
 {
-    double x;
-    double y;
-    double width;
-    double height;
-    double padding;
-    double titleOffset;
-    double line1Offset;
-    double line2Offset;
-    double line3Offset;
+    std::string text;
+    double fontSize;
 };
 
-struct TableGeometry
+struct PageDefinition
 {
-    double x;
-    double y;
-    double width;
-    double descriptionX;
-    double quantityX;
-    double priceX;
-    double quantityLineX;
-    double priceLineX;
+    PdfPageSize size;
+    PdfStrokeStyle strokeStyle;
+    double lineWidth;
+};
+
+struct PageContext
+{
+    PdfPage* page;
+    PdfPainter* painter;
+    PdfFont* font;
+};
+
+struct InvoiceTableLayout
+{
+    double headerHeight;
     double rowHeight;
-    double textOffset;
+    double quantityWidth;
+    double unitPriceWidth;
+    double totalsWidth;
+    double padding;
 };
 
 class InvoicePdf
@@ -39,12 +54,14 @@ public:
     void generate(const Invoice& invoice, const std::string& filename) const;
 
 private:
-    void drawCompanyBlock(PoDoFo::PdfPainter& painter, PoDoFo::PdfFont& font, const Invoice& invoice, const BlockGeometry& geometry) const;
-    void drawInvoiceBlock(PoDoFo::PdfPainter& painter, PoDoFo::PdfFont& font, const Invoice& invoice, const BlockGeometry& geometry) const;
-    void drawCustomerBlock(PoDoFo::PdfPainter& painter, PoDoFo::PdfFont& font, const Invoice& invoice, const BlockGeometry& geometry) const;
-    double drawItemsTable(PoDoFo::PdfPainter& painter, PoDoFo::PdfFont& font, const Invoice& invoice, double& tableBottom, const TableGeometry& geometry) const;
-    void drawTotals(PoDoFo::PdfPainter& painter, PoDoFo::PdfFont& font, double totalHT, double tableBottom) const;
-    void drawFooter(PoDoFo::PdfPainter& painter, PoDoFo::PdfFont& font, const Invoice& invoice) const;
+    std::vector<PageContext> createPageContexts(PdfMemDocument& document, const std::vector<PageDefinition>& definitions, std::vector<std::unique_ptr<PdfPainter>>& painters) const;
+    void drawPage(const Invoice& invoice, const PageContext& context, const Layout& layout) const;
+    void drawCompanyBlock(PdfPainter& painter, PdfFont& font, const Invoice& invoice, const BlockGeometry& geometry) const;
+    void drawInvoiceBlock(PdfPainter& painter, PdfFont& font, const Invoice& invoice, const BlockGeometry& geometry) const;
+    void drawCustomerBlock(PdfPainter& painter, PdfFont& font, const Invoice& invoice, const BlockGeometry& geometry) const;
+    void drawTextBlock(PdfPainter& painter, PdfFont& font, const BlockGeometry& geometry, const std::vector<TextLine>& lines) const;
+    void drawParagraph(PdfPainter& painter, PdfFont& font, const std::string& text, double x, double y, double maxWidth, double lineHeight) const;
+    double drawInvoiceTable(PdfPainter& painter, PdfFont& font, const Invoice& invoice, const BlockGeometry& geometry) const;
 };
 
 }

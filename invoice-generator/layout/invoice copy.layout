@@ -1,0 +1,67 @@
+[company]
+x=50
+y=800
+width=240
+height=90
+padding=10
+lineSpacing=20
+text=company.name|16
+text=company.address|10
+text=company.phoneNumber|10
+text=company.email|10
+
+[invoice]
+x=305
+y=800
+width=240
+height=90
+padding=10
+lineSpacing=20
+text=FACTURE|18
+text=Numero : {invoice.number}|10
+text=Date : {invoice.date}|10
+
+[customer]
+x=50
+y=685
+width=495
+height=80
+padding=10
+lineSpacing=20
+text=CLIENT|12
+text=customer.name|10
+text=customer.address|10
+
+[table]
+x=50
+y=585
+width=495
+height=60
+descriptionX=60
+quantityX=350
+priceX=430
+quantityLineX=340
+priceLineX=420
+rowHeight=25
+textOffset=17
+
+[totals]
+x=400
+totalHTOffset=25
+totalOffset=50
+totalHTFontSize=10
+totalFontSize=12
+
+[footer]
+x=50
+y=300
+lineHeight=14
+fontSize=9
+text=TVA non applicable, art. 293 B du CGI
+text=Condition de règlement : 30 jours suivant la facture
+text=Modalité et condition de règlement : Virement bancaire
+text=B.I.C. : BOUSFRPPXXX / I.B.A.N. : FR76 4061 8803 5800 0402 3905 363
+paragraph=La présente facture sera payable au plus tard le : 02/08/2023. Passé ce délai, sans obligation dʼenvoi dʼune relance, conformément à lʼarticle L441-10 II du Code de Commerce il sera appliqué une pénalité calculée à un taux annuel de 10%. Une indemnité forfaitaire pour frais de recouvrement de 40€ sera aussi exigible. Escompte pour paiement anticipé : néant. Les opérations donnant lieu à facture sont constituées exclusivement de prestations de services.
+text=N° Siret 923 249 908 00016
+text=Code APE 8552Z
+

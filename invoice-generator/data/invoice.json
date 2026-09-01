@@ -1,0 +1,29 @@
+{
+    "company": {
+        "name": "Insane Science",
+        "address": "119 Route de Charras 16410 SERS",
+        "phoneNumber": "06 89 10 83 82",
+        "email": "insanesciencemail2@gmail.com"
+    },
+
+    "number": "2026-001",
+    "date": "25/08/2026",
+
+    "customer": {
+        "name": "Espace Jeunesse Chalosse",
+        "address": "55 place Foch 40380 Montfort-en-Chalosse"
+    },
+
+    "items": [
+        {
+            "description": "Animation scientifique du ../..",
+            "quantity": 1,
+            "unitPrice": 150.00
+        },
+        {
+            "description": "Animation scientifique du ../..",
+            "quantity": 1,
+            "unitPrice": 150.00
+        }
+    ]
+}
